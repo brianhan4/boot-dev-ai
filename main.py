@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
-from call_function import available_functions
+from call_function import available_functions, call_function
 from prompts import system_prompt
 import sys
 
@@ -32,34 +32,60 @@ def main():
     generate_content(client, messages, args, user_prompt)
 
 
+
 def generate_content(client, messages, args, user_prompt):
+    is_verbose = VERBOSE_FLAG in args
 
 
-    
-    response = client.models.generate_content(
-        model='gemini-2.0-flash-001', 
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions], 
-            system_instruction=system_prompt)
-        )
+    for i in range(20):
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.0-flash-001', 
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    tools=[available_functions], 
+                    system_instruction=system_prompt)
+            )
+            for candidate in (response.candidates or []):
+                messages.append(candidate.content)
 
-    prompt_tokens = response.usage_metadata.prompt_token_count
-    response_tokens = response.usage_metadata.candidates_token_count
+            function_responses = []
+            for function_call_part in (response.function_calls or []):
+                if is_verbose:
+                    print(f"- Calling function: {function_call_part.name}")
+                function_call_result = call_function(function_call_part, is_verbose)
 
-    if VERBOSE_FLAG in args:
-        print(f"User prompt: {user_prompt}")
-        print(f"Prompt tokens: {prompt_tokens}")
-        print(f"Response tokens: {response_tokens}")
+                if (
+                    not function_call_result.parts
+                    or not function_call_result.parts[0].function_response
+                ):
+                    raise Exception("empty function call result")
+
+                if is_verbose:
+                    print(f"-> {function_call_result.parts[0].function_response.response}")
+                function_responses.append(function_call_result.parts[0])
+
+            if function_responses:
+                tool_msg = types.Content(
+                    role="user",
+                    parts=function_responses,
+                )
+                messages.append(tool_msg)
+                continue
+            
+            elif response.text:
+                print("Final response:")
+                print(response.text)
+                break
+
+        except Exception as e:
+            if is_verbose:
+                print(f"Error: {e}")
+
+
+
+
         
-    
-    function_calls = response.function_calls
-    if not function_calls:
-        return response.text
-        
-    for function_call_part in function_calls:
-        print (f"Calling function: {function_call_part.name}({function_call_part.args})")
-    
 
 
 if __name__ == "__main__":

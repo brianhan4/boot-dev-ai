@@ -7,9 +7,9 @@ class Calculator:
             "/": lambda a, b: a / b,
         }
         self.precedence = {
-            "+": 1,
+            "+": 2,
             "-": 1,
-            "*": 2,
+            "*": 3,
             "/": 2,
         }
 
@@ -17,7 +17,10 @@ class Calculator:
         if not expression or expression.isspace():
             return None
         tokens = expression.strip().split()
-        return self._evaluate_infix(tokens)
+        try:
+            return self._evaluate_infix(tokens)
+        except ValueError as e:
+            raise ValueError(f"Invalid expression: {e}. Please ensure the expression is properly formatted.")
 
     def _evaluate_infix(self, tokens):
         values = []
